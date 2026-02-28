@@ -2,17 +2,31 @@ pub mod safe {
     use anyhow::anyhow;
     use colored::Colorize;
 
-    pub trait ArgsChecker {
+    use crate::dec_enc::read_yaml;
+
+    pub trait Checkers {
         type Out;
 
         fn checker(self, res: String) -> Self::Out;
+    }
+
+    pub trait MasterKeyV {
+        type Out;
+
+        fn master_key_checker(self) -> Self::Out;
+    }
+
+    pub trait FileChecker {
+        type Out;
+
+        fn check_existing_url_apps(self, url_app: &str) -> Self::Out;
     }
 
     pub trait AnyHowErrHelper {
         fn pe(self) -> Self;
     }
 
-    impl<T> ArgsChecker for anyhow::Result<T> {
+    impl<T> Checkers for anyhow::Result<T> {
         type Out = anyhow::Result<T>;
         fn checker(self, res: String) -> Self::Out {
             match self {
@@ -20,6 +34,35 @@ pub mod safe {
                 Err(_) => {
                     return Err(anyhow!("missing value [{}]", res));
                 }
+            }
+        }
+    }
+
+    impl MasterKeyV for String {
+        type Out = anyhow::Result<String>;
+
+        fn master_key_checker(self) -> Self::Out {
+            if self.len() >= 12 {
+                return Ok(self);
+            } else {
+                return Err(anyhow!("The master key must be 12 checkters at least "));
+            }
+        }
+    }
+
+    impl FileChecker for String {
+        type Out = anyhow::Result<String>;
+
+        fn check_existing_url_apps(self, url_app: &str) -> Self::Out {
+            let read_yaml = read_yaml()?;
+
+            if let Some(o) = read_yaml.iter().find(|s| s.url_app == url_app) {
+                return Err(anyhow!(
+                    "the url/app does already exist try another one or add special symbols beside it ! <{}>",
+                    o.url_app.to_string().bright_yellow().bold()
+                ));
+            } else {
+                return Ok(self);
             }
         }
     }

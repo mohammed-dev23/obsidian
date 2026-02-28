@@ -6,12 +6,13 @@ use std::{
     io::{Write, stdout},
 };
 mod test;
+
 use crate::{
     backend::{
         parser::{Token, parse_input},
-        safe::{AnyHowErrHelper, ArgsChecker},
+        safe::{AnyHowErrHelper, Checkers, FileChecker, MasterKeyV},
     },
-    dec_enc::{add, get},
+    dec_enc::{add, add_pass_maker, add_pass_val, get, list, remove},
 };
 use dec_enc::{_pre_, home_dirr, pre_add};
 
@@ -35,27 +36,56 @@ fn interface() -> anyhow::Result<()> {
                 let username = data.get_token(1).checker("username".to_string()).pe();
                 let password = data.get_token(2).checker("password".to_string()).pe();
                 let url_app = data.get_token(3).checker("url/app".to_string()).pe();
-                let master_key = data.get_token(4).checker("master-key".to_string()).pe();
+                let master_key = data
+                    .get_token(4)
+                    .checker("master-key".to_string())?
+                    .master_key_checker()
+                    .pe();
 
-                if let (Ok(us), Ok(p), Ok(u), Ok(m)) = (username, password, url_app, master_key) {
-                    if fs::File::open(
-                        home_dirr()?
-                            .join("obsidian/obs.yaml")
-                            .to_string_lossy()
-                            .to_string(),
-                    )
-                    .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
+                let add_password = data.get_token(5).checker("add-password".to_string()).pe();
+
+                let res = if fs::File::open(
+                    home_dirr()?
+                        .join("obsidian/obs_add_password.txt")
+                        .to_string_lossy()
+                        .to_string(),
+                )
+                .is_ok()
+                {
+                    add_pass_val(add_password?.trim()).pe()
+                } else {
+                    add_pass_maker(add_password?.trim()).pe()
+                };
+
+                if res.is_ok() {
+                    if let (Ok(us), Ok(p), Ok(u), Ok(m)) = (username, password, url_app, master_key)
                     {
-                        _pre_()?;
-                        pre_add(us, u, p, m)?;
-                    } else {
-                        add(us, u, p, m)?;
+                        if fs::File::open(
+                            home_dirr()?
+                                .join("obsidian/obs.yaml")
+                                .to_string_lossy()
+                                .to_string(),
+                        )
+                        .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
+                        {
+                            _pre_()?;
+                            pre_add(us, u, p, m).pe()?;
+                        } else {
+                            let u = u.check_existing_url_apps(&data.get_token(3)?).pe();
+                            if let Ok(u) = u {
+                                add(us, u, p, m).pe()?;
+                            }
+                        }
                     }
                 }
             }
             "get" => {
                 let url_app = data.get_token(1).checker("app/url".to_string()).pe();
-                let master_key = data.get_token(2).checker("master-key".to_string()).pe();
+                let master_key = data
+                    .get_token(2)
+                    .checker("master-key".to_string())?
+                    .master_key_checker()
+                    .pe();
 
                 if let (Ok(o), Ok(p)) = (url_app, master_key) {
                     get(o, p).pe()?
@@ -66,14 +96,15 @@ fn interface() -> anyhow::Result<()> {
                 match data.get_token(1)?.trim() {
                     "--add" => {
                         println!(
-                            ">>{}: [{}] [{}] [{}] [{}] [{}] [{}]",
+                            ">>{}: [{}] [{}] [{}] [{}] [{}] [{}] [{}]",
                             "Usge".bright_green().bold(),
                             "obsidan".bright_blue().bold(),
                             "add".bright_yellow().bold(),
                             "username/email".bright_yellow().bold(),
                             "passwored".bright_yellow().bold(),
                             "url/app".bright_yellow().bold(),
-                            "master-key".bright_yellow().bold()
+                            "master-key".bright_yellow().bold(),
+                            "add-password".bright_yellow().bold(),
                         );
                     }
                     "--get" => {
@@ -91,6 +122,16 @@ fn interface() -> anyhow::Result<()> {
                     }
                 }
                 continue;
+            }
+            "list" => {
+                list().pe()?;
+            }
+            "remove" => {
+                let url_app = data.get_token(1).checker("url/app".to_string()).pe();
+
+                if let Ok(o) = url_app {
+                    remove(&o)?;
+                }
             }
             "exit" => {
                 std::process::exit(1);

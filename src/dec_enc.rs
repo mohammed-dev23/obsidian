@@ -10,13 +10,14 @@ use aes_gcm::{
 };
 use argon2::Argon2;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 
 use crate::backend::safe::AnyHowErrHelper;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Felids {
-    url_app: String,
-    data: String,
+pub struct Felids {
+    pub url_app: String,
+    pub data: String,
 }
 
 pub fn home_dirr() -> anyhow::Result<PathBuf> {
@@ -111,7 +112,7 @@ pub fn get(url_app: String, master_key: String) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn read_yaml() -> anyhow::Result<Vec<Felids>> {
+pub fn read_yaml() -> anyhow::Result<Vec<Felids>> {
     let mut s = String::new();
     let mut o = fs::File::open(
         home_dirr()?
@@ -186,4 +187,75 @@ fn dec(master_key: &String, url_app: &String) -> anyhow::Result<Vec<u8>> {
         .map_err(|_| anyhow!("Couldn't dec data"))?;
 
     Ok(dec)
+}
+
+pub fn list() -> anyhow::Result<()> {
+    let read_yaml = read_yaml()?;
+
+    for i in read_yaml {
+        println!(
+            ">>{} url/app <{}> | data : <{}>",
+            "obsidian".bright_cyan().bold(),
+            i.url_app.to_string().bright_white().bold(),
+            i.data.to_string().bright_white().bold()
+        );
+    }
+
+    Ok(())
+}
+
+pub fn add_pass_maker(add_pass: &str) -> anyhow::Result<()> {
+    fs::create_dir_all(home_dirr()?.join("obsidian/").to_string_lossy().to_string())?;
+
+    fs::File::create(
+        home_dirr()?
+            .join("obsidian/obs_add_password.txt")
+            .to_string_lossy()
+            .to_string(),
+    )?;
+
+    let add_pass = BASE64_STANDARD.encode(sha2::Sha256::digest(add_pass));
+    fs::write(
+        home_dirr()?
+            .join("obsidian/obs_add_password.txt")
+            .to_string_lossy()
+            .to_string(),
+        add_pass,
+    )?;
+    Ok(())
+}
+
+pub fn add_pass_val(add_pass: &str) -> anyhow::Result<()> {
+    let mut read = fs::File::open(
+        home_dirr()?
+            .join("obsidian/obs_add_password.txt")
+            .to_string_lossy()
+            .to_string(),
+    )?;
+    let mut s = String::new();
+    read.read_to_string(&mut s)?;
+
+    if BASE64_STANDARD.encode(sha2::Sha256::digest(add_pass)) == s {
+        return Ok(());
+    } else {
+        return Err(anyhow!("the add password doesn't match try again later"));
+    }
+}
+
+pub fn remove(url_app: &String) -> anyhow::Result<()> {
+    let mut read_yaml = read_yaml()?;
+
+    if let Some(o) = read_yaml.iter().position(|s| s.url_app == *url_app) {
+        read_yaml.remove(o);
+    }
+
+    let yaml = serde_yaml::to_string(&read_yaml)?;
+    fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+
+    println!(
+        ">>{} removed [{}]",
+        "obsidian".bright_cyan().bold(),
+        url_app.bright_white().bold()
+    );
+    Ok(())
 }
