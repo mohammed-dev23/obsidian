@@ -19,7 +19,7 @@ pub mod safe {
     pub trait FileChecker {
         type Out;
 
-        fn check_existing_url_apps(self, url_app: &str) -> Self::Out;
+        fn check_existing_url_apps(self, url_app: &str, ef: Option<&String>) -> Self::Out;
     }
 
     pub trait AnyHowErrHelper {
@@ -53,8 +53,8 @@ pub mod safe {
     impl FileChecker for String {
         type Out = anyhow::Result<String>;
 
-        fn check_existing_url_apps(self, url_app: &str) -> Self::Out {
-            let read_yaml = read_yaml()?;
+        fn check_existing_url_apps(self, url_app: &str, ef: Option<&String>) -> Self::Out {
+            let read_yaml = read_yaml(ef)?;
 
             if let Some(o) = read_yaml.iter().find(|s| s.url_app == url_app) {
                 return Err(anyhow!(

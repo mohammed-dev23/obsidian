@@ -1,8 +1,8 @@
-use std::{env::home_dir, fs, io::Read, path::PathBuf};
-
 use anyhow::anyhow;
 use base64::prelude::*;
 use colored::Colorize;
+use std::{env::home_dir, fs, io::Read, path::PathBuf};
+use zeroize::Zeroizing;
 
 use aes_gcm::{
     AeadCore, Aes256Gcm, Key, KeyInit, Nonce,
@@ -10,7 +10,6 @@ use aes_gcm::{
 };
 use argon2::Argon2;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 
 use crate::backend::safe::AnyHowErrHelper;
 
@@ -31,7 +30,7 @@ pub fn home_dirr() -> anyhow::Result<PathBuf> {
 }
 
 pub fn _pre_() -> anyhow::Result<()> {
-    let home_dir = home_dirr()?;
+    let home_dir = home_dirr()?;        
     fs::create_dir_all(home_dir.join("obsidian").to_string_lossy().to_string())?;
     Ok(())
 }
@@ -41,7 +40,11 @@ pub fn pre_add(
     url_app: String,
     password: String,
     master_key: String,
+    ef: Option<&String>,
 ) -> anyhow::Result<()> {
+    let password = Zeroizing::new(password);
+    let master_key = Zeroizing::new(master_key);
+
     let data = enc(&master_key, &username_email, &password)?;
 
     let data = BASE64_STANDARD.encode(data);
@@ -55,16 +58,19 @@ pub fn pre_add(
 
     let yaml = serde_yaml::to_string(&vec)?;
 
-    fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+    if let Some(o) = ef {
+        fs::File::create(o)?;
+        fs::write(home_dirr()?.join(o), yaml)?;
+    } else {
+        fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+    }
 
     println!(
-        ">>{}: added [{}] [{}] [{}]",
+        ">>{}: added [{}] [{}]",
         "obsidian".bright_cyan().bold(),
         username_email.to_string().white().bold(),
-        password.bright_white().bold(),
         url_app.bright_white().bold()
     );
-
     Ok(())
 }
 
@@ -73,8 +79,12 @@ pub fn add(
     url_app: String,
     password: String,
     master_key: String,
+    ef: Option<&String>,
 ) -> anyhow::Result<()> {
-    let mut file = read_yaml().pe()?;
+    let password = Zeroizing::new(password);
+    let master_key = Zeroizing::new(master_key);
+
+    let mut file = read_yaml(ef).pe()?;
     let data = BASE64_STANDARD.encode(enc(&master_key, &username_email, &password)?);
     let cont = Felids {
         url_app: url_app.clone(),
@@ -84,21 +94,28 @@ pub fn add(
     file.push(cont);
 
     let yaml = serde_yaml::to_string(&file)?;
-    fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+
+    if let Some(o) = ef {
+        fs::File::create(o)?;
+        fs::write(home_dirr()?.join(o), yaml)?;
+    } else {
+        fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+    }
 
     println!(
-        ">>{}: added [{}] [{}] [{}]",
+        ">>{}: added [{}] [{}]",
         "obsidian".bright_cyan().bold(),
         username_email.to_string().white().bold(),
-        password.bright_white().bold(),
         url_app.bright_white().bold()
     );
 
     Ok(())
 }
 
-pub fn get(url_app: String, master_key: String) -> anyhow::Result<()> {
-    let dec = dec(&master_key, &url_app)?;
+pub fn get(url_app: String, master_key: String, ef: Option<&String>) -> anyhow::Result<()> {
+    let master_key = Zeroizing::new(master_key);
+
+    let dec = dec(&master_key, &url_app, ef)?;
     let dec = String::from_utf8(dec)?;
     let decc: Vec<String> = dec.split('|').map(|s| s.to_string()).collect();
 
@@ -112,14 +129,22 @@ pub fn get(url_app: String, master_key: String) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn read_yaml() -> anyhow::Result<Vec<Felids>> {
+pub fn read_yaml(ef: Option<&String>) -> anyhow::Result<Vec<Felids>> {
     let mut s = String::new();
-    let mut o = fs::File::open(
-        home_dirr()?
-            .join("obsidian/obs.yaml")
-            .to_string_lossy()
-            .to_string(),
-    )?;
+
+    let mut o = if let Some(ef) = ef {
+        let o = fs::File::open(home_dirr()?.join(ef))?;
+        o
+    } else {
+        let o = fs::File::open(
+            home_dirr()?
+                .join("obsidian/obs.yaml")
+                .to_string_lossy()
+                .to_string(),
+        )?;
+        o
+    };
+
     o.read_to_string(&mut s)?;
 
     if let Ok(vec) = serde_yaml::from_str::<Vec<Felids>>(&mut s) {
@@ -133,17 +158,17 @@ fn enc(master_key: &String, username_email: &String, password: &String) -> anyho
     let mut salt = [0u8; 16];
     OsRng.fill_bytes(&mut salt);
     let argon2 = Argon2::default();
-    let mut out_master = [0u8; 32];
+    let mut out_master = Zeroizing::new([0u8; 32]);
 
     argon2
-        .hash_password_into(master_key.as_bytes(), &salt, &mut out_master)
+        .hash_password_into(master_key.as_bytes(), &salt, &mut *out_master)
         .map_err(|_| anyhow!("Couldn't hash master key"))?;
 
-    let key = Key::<Aes256Gcm>::from_slice(&out_master);
+    let key = Key::<Aes256Gcm>::from_slice(&*out_master);
     let cip = Aes256Gcm::new(&key);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
-    let format = format!("{}|{}", username_email, password);
+    let format = Zeroizing::new(format!("{}|{}", username_email, password.to_string()));
 
     let enc = cip
         .encrypt(&nonce, format.as_bytes())
@@ -157,8 +182,8 @@ fn enc(master_key: &String, username_email: &String, password: &String) -> anyho
     Ok(finsh)
 }
 
-fn dec(master_key: &String, url_app: &String) -> anyhow::Result<Vec<u8>> {
-    let read_yaml = read_yaml()?;
+fn dec(master_key: &String, url_app: &String, ef: Option<&String>) -> anyhow::Result<Vec<u8>> {
+    let read_yaml = read_yaml(ef)?;
 
     let data = if let Some(s) = read_yaml.iter().find(|s| s.url_app == *url_app) {
         s.data.trim()
@@ -172,13 +197,13 @@ fn dec(master_key: &String, url_app: &String) -> anyhow::Result<Vec<u8>> {
     let (nonce_bytes, restt) = rest.split_at(12);
 
     let argon2 = Argon2::default();
-    let mut out_pass = [0u8; 32];
+    let mut out_pass = Zeroizing::new([0u8; 32]);
 
     argon2
-        .hash_password_into(master_key.as_bytes(), salt, &mut out_pass)
+        .hash_password_into(master_key.as_bytes(), salt, &mut *out_pass)
         .map_err(|_| anyhow!("Couldn't hash master key"))?;
 
-    let key = Key::<Aes256Gcm>::from_slice(&out_pass);
+    let key = Key::<Aes256Gcm>::from_slice(&*out_pass);
     let cip = Aes256Gcm::new(&key);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -189,8 +214,8 @@ fn dec(master_key: &String, url_app: &String) -> anyhow::Result<Vec<u8>> {
     Ok(dec)
 }
 
-pub fn list() -> anyhow::Result<()> {
-    let read_yaml = read_yaml()?;
+pub fn list(ef: Option<&String>) -> anyhow::Result<()> {
+    let read_yaml = read_yaml(ef)?;
 
     for i in read_yaml {
         println!(
@@ -214,7 +239,23 @@ pub fn add_pass_maker(add_pass: &str) -> anyhow::Result<()> {
             .to_string(),
     )?;
 
-    let add_pass = BASE64_STANDARD.encode(sha2::Sha256::digest(add_pass));
+    let add_pass = add_pass.trim();
+
+    let argon2 = Argon2::default();
+    let mut salt = [0u8; 16];
+    OsRng.fill_bytes(&mut salt);
+    let mut out_add_pass = Zeroizing::new([0u8; 32]);
+
+    argon2
+        .hash_password_into(add_pass.as_bytes(), &salt, &mut *out_add_pass)
+        .map_err(|_| anyhow!("Couldn't hash the password in argon2"))?;
+
+    let mut vec = Vec::new();
+    vec.extend_from_slice(&salt);
+    vec.extend_from_slice(&*out_add_pass);
+
+    let add_pass = BASE64_STANDARD.encode(vec);
+
     fs::write(
         home_dirr()?
             .join("obsidian/obs_add_password.txt")
@@ -235,22 +276,48 @@ pub fn add_pass_val(add_pass: &str) -> anyhow::Result<()> {
     let mut s = String::new();
     read.read_to_string(&mut s)?;
 
-    if BASE64_STANDARD.encode(sha2::Sha256::digest(add_pass)) == s {
+    let s = s.trim();
+
+    let dec_base64 = BASE64_STANDARD.decode(&s.trim())?;
+
+    let (salt, _) = dec_base64.split_at(16);
+
+    let mut out_pass_add = Zeroizing::new([0u8; 32]);
+    let argon2 = Argon2::default();
+
+    argon2
+        .hash_password_into(add_pass.as_bytes(), &salt, &mut *out_pass_add)
+        .map_err(|_| anyhow!("Couldn't hash the password using argon2"))?;
+
+    let mut vec = Vec::new();
+    vec.extend_from_slice(&salt);
+    vec.extend_from_slice(&*out_pass_add);
+
+    let enc = BASE64_STANDARD.encode(vec);
+
+    if enc == s {
         return Ok(());
     } else {
-        return Err(anyhow!("the add password doesn't match try again later"));
+        return Err(anyhow!(
+            "the add password didn't match try agian with diffrent one!"
+        ));
     }
 }
 
-pub fn remove(url_app: &String) -> anyhow::Result<()> {
-    let mut read_yaml = read_yaml()?;
+pub fn remove(url_app: &String, ef: Option<&String>) -> anyhow::Result<()> {
+    let mut read_yaml = read_yaml(ef)?;
 
     if let Some(o) = read_yaml.iter().position(|s| s.url_app == *url_app) {
         read_yaml.remove(o);
     }
 
     let yaml = serde_yaml::to_string(&read_yaml)?;
-    fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+
+    if let Some(ef) = ef {
+        fs::write(home_dirr()?.join(ef), yaml)?;
+    } else {
+        fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+    }
 
     println!(
         ">>{} removed [{}]",

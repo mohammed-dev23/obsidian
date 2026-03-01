@@ -6,7 +6,6 @@ use std::{
     io::{Write, stdout},
 };
 mod test;
-
 use crate::{
     backend::{
         parser::{Token, parse_input},
@@ -69,11 +68,11 @@ fn interface() -> anyhow::Result<()> {
                         .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
                         {
                             _pre_()?;
-                            pre_add(us, u, p, m).pe()?;
+                            pre_add(us, u, p, m, None).pe()?;
                         } else {
-                            let u = u.check_existing_url_apps(&data.get_token(3)?).pe();
+                            let u = u.check_existing_url_apps(&data.get_token(3)?, None).pe();
                             if let Ok(u) = u {
-                                add(us, u, p, m).pe()?;
+                                add(us, u, p, m, None).pe()?;
                             }
                         }
                     }
@@ -88,7 +87,7 @@ fn interface() -> anyhow::Result<()> {
                     .pe();
 
                 if let (Ok(o), Ok(p)) = (url_app, master_key) {
-                    get(o, p).pe()?
+                    get(o, p, None).pe()?
                 }
             }
 
@@ -124,15 +123,112 @@ fn interface() -> anyhow::Result<()> {
                 continue;
             }
             "list" => {
-                list().pe()?;
+                list(None).pe()?;
             }
             "remove" => {
                 let url_app = data.get_token(1).checker("url/app".to_string()).pe();
 
                 if let Ok(o) = url_app {
-                    remove(&o)?;
+                    remove(&o, None)?;
                 }
             }
+            "external" => match data.get_token(1)?.trim() {
+                "add" => {
+                    let username = data.get_token(2).checker("username".to_string()).pe();
+                    let password = data.get_token(3).checker("password".to_string()).pe();
+                    let url_app = data.get_token(4).checker("url/app".to_string()).pe();
+                    let master_key = data
+                        .get_token(5)
+                        .checker("master-key".to_string())?
+                        .master_key_checker()
+                        .pe();
+
+                    let add_password = data.get_token(6).checker("add-password".to_string()).pe();
+                    let external_file = data
+                        .get_token(7)
+                        .checker("external file/path/name".to_string())
+                        .pe();
+
+                    let res = if fs::File::open(
+                        home_dirr()?
+                            .join("obsidian/obs_add_password.txt")
+                            .to_string_lossy()
+                            .to_string(),
+                    )
+                    .is_ok()
+                    {
+                        add_pass_val(add_password?.trim()).pe()
+                    } else {
+                        add_pass_maker(add_password?.trim()).pe()
+                    };
+
+                    if res.is_ok() {
+                        if let (Ok(us), Ok(p), Ok(u), Ok(m), Ok(ef)) =
+                            (username, password, url_app, master_key, external_file)
+                        {
+                            if fs::File::open(
+                                home_dirr()?
+                                    .join(&ef)
+                                    .to_string_lossy()
+                                    .to_string(),
+                            )
+                            .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
+                            {
+                                _pre_()?;
+                                pre_add(us, u, p, m, Some(&ef)).pe()?;
+                            } else {
+                                let u = u
+                                    .check_existing_url_apps(&data.get_token(4)?, Some(&ef))
+                                    .pe();
+                                if let Ok(u) = u {
+                                    add(us, u, p, m, Some(&ef)).pe()?;
+                                }
+                            }
+                        }
+                    }
+                }
+                "get" => {
+                    let url_app = data.get_token(2).checker("app/url".to_string()).pe();
+                    let master_key = data
+                        .get_token(3)
+                        .checker("master-key".to_string())?
+                        .master_key_checker()
+                        .pe();
+
+                    let ef = data
+                        .get_token(4)
+                        .checker("external file/path/name".to_string())
+                        .pe();
+
+                    if let (Ok(o), Ok(p), Ok(ef)) = (url_app, master_key, ef) {
+                        get(o, p, Some(&ef)).pe()?
+                    }
+                }
+                "list" => {
+                    let ef = data
+                        .get_token(2)
+                        .checker("external file/path/name".to_string())
+                        .pe();
+
+                    if let Ok(o) = ef {
+                        list(Some(&o)).pe()?;
+                    }
+                }
+                "remove" => {
+                    let url_app = data.get_token(2).checker("url/app".to_string()).pe();
+                    let ef = data
+                        .get_token(3)
+                        .checker("external file/path/name".to_string())
+                        .pe();
+
+                    if let (Ok(o), Ok(ef)) = (url_app, ef) {
+                        remove(&o, Some(&ef))?;
+                    }
+                }
+                _ => {
+                    continue;
+                }
+            },
             "exit" => {
                 std::process::exit(1);
             }
