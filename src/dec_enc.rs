@@ -30,7 +30,7 @@ pub fn home_dirr() -> anyhow::Result<PathBuf> {
 }
 
 pub fn _pre_() -> anyhow::Result<()> {
-    let home_dir = home_dirr()?;        
+    let home_dir = home_dirr()?;
     fs::create_dir_all(home_dir.join("obsidian").to_string_lossy().to_string())?;
     Ok(())
 }
@@ -61,8 +61,10 @@ pub fn pre_add(
     if let Some(o) = ef {
         fs::File::create(o)?;
         fs::write(home_dirr()?.join(o), yaml)?;
+        set_perm_over_file(&home_dirr()?.join(o))?;
     } else {
         fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+        set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
     }
 
     println!(
@@ -98,8 +100,10 @@ pub fn add(
     if let Some(o) = ef {
         fs::File::create(o)?;
         fs::write(home_dirr()?.join(o), yaml)?;
+        set_perm_over_file(&home_dirr()?.join(o))?;
     } else {
         fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+        set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
     }
 
     println!(
@@ -229,47 +233,48 @@ pub fn list(ef: Option<&String>) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn add_pass_maker(add_pass: &str) -> anyhow::Result<()> {
+pub fn action_pass_maker(action_pass: &str) -> anyhow::Result<()> {
     fs::create_dir_all(home_dirr()?.join("obsidian/").to_string_lossy().to_string())?;
 
     fs::File::create(
         home_dirr()?
-            .join("obsidian/obs_add_password.txt")
+            .join("obsidian/obs_password.txt")
             .to_string_lossy()
             .to_string(),
     )?;
+    set_perm_over_file(&home_dirr()?.join("obsidian/obs_password.txt"))?;
 
-    let add_pass = add_pass.trim();
+    let ac_pass = action_pass.trim();
 
     let argon2 = Argon2::default();
     let mut salt = [0u8; 16];
     OsRng.fill_bytes(&mut salt);
-    let mut out_add_pass = Zeroizing::new([0u8; 32]);
+    let mut out_ac_pass = Zeroizing::new([0u8; 32]);
 
     argon2
-        .hash_password_into(add_pass.as_bytes(), &salt, &mut *out_add_pass)
+        .hash_password_into(ac_pass.as_bytes(), &salt, &mut *out_ac_pass)
         .map_err(|_| anyhow!("Couldn't hash the password in argon2"))?;
 
     let mut vec = Vec::new();
     vec.extend_from_slice(&salt);
-    vec.extend_from_slice(&*out_add_pass);
+    vec.extend_from_slice(&*out_ac_pass);
 
-    let add_pass = BASE64_STANDARD.encode(vec);
+    let ac_pass = BASE64_STANDARD.encode(vec);
 
     fs::write(
         home_dirr()?
-            .join("obsidian/obs_add_password.txt")
+            .join("obsidian/obs_password.txt")
             .to_string_lossy()
             .to_string(),
-        add_pass,
+        ac_pass,
     )?;
     Ok(())
 }
 
-pub fn add_pass_val(add_pass: &str) -> anyhow::Result<()> {
+pub fn action_pass_val(action_pass: &str) -> anyhow::Result<()> {
     let mut read = fs::File::open(
         home_dirr()?
-            .join("obsidian/obs_add_password.txt")
+            .join("obsidian/obs_password.txt")
             .to_string_lossy()
             .to_string(),
     )?;
@@ -282,16 +287,16 @@ pub fn add_pass_val(add_pass: &str) -> anyhow::Result<()> {
 
     let (salt, _) = dec_base64.split_at(16);
 
-    let mut out_pass_add = Zeroizing::new([0u8; 32]);
+    let mut out_pass_ac = Zeroizing::new([0u8; 32]);
     let argon2 = Argon2::default();
 
     argon2
-        .hash_password_into(add_pass.as_bytes(), &salt, &mut *out_pass_add)
+        .hash_password_into(action_pass.as_bytes(), &salt, &mut *out_pass_ac)
         .map_err(|_| anyhow!("Couldn't hash the password using argon2"))?;
 
     let mut vec = Vec::new();
     vec.extend_from_slice(&salt);
-    vec.extend_from_slice(&*out_pass_add);
+    vec.extend_from_slice(&*out_pass_ac);
 
     let enc = BASE64_STANDARD.encode(vec);
 
@@ -315,8 +320,10 @@ pub fn remove(url_app: &String, ef: Option<&String>) -> anyhow::Result<()> {
 
     if let Some(ef) = ef {
         fs::write(home_dirr()?.join(ef), yaml)?;
+        set_perm_over_file(&home_dirr()?.join(ef))?;
     } else {
         fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+        set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
     }
 
     println!(
@@ -324,5 +331,17 @@ pub fn remove(url_app: &String, ef: Option<&String>) -> anyhow::Result<()> {
         "obsidian".bright_cyan().bold(),
         url_app.bright_white().bold()
     );
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_perm_over_file(path: &PathBuf) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let file = fs::File::open(path)?;
+    let mut perm = file.metadata()?.permissions();
+    perm.set_mode(0o600);
+
+    fs::set_permissions(&path, perm)?;
     Ok(())
 }

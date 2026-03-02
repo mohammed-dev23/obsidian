@@ -1,17 +1,22 @@
 mod backend;
 mod dec_enc;
+use anyhow::anyhow;
 use colored::Colorize;
 use std::{
     fs,
     io::{Write, stdout},
 };
 mod test;
+use rustyline::{DefaultEditor, error::ReadlineError};
+
 use crate::{
     backend::{
         parser::{Token, parse_input},
-        safe::{AnyHowErrHelper, Checkers, FileChecker, MasterKeyV},
+        safe::{
+            AnyHowErrHelper, Checkers, FileChecker, MasterKeyV, PasswordChecker, action_password,
+        },
     },
-    dec_enc::{add, add_pass_maker, add_pass_val, get, list, remove},
+    dec_enc::{add, get, list, remove},
 };
 use dec_enc::{_pre_, home_dirr, pre_add};
 
@@ -24,11 +29,18 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn interface() -> anyhow::Result<()> {
-    loop {
-        print!("[obsidian]~>");
-        stdout().flush()?;
+    let mut rl = DefaultEditor::new()?;
 
-        let data = parse_input()?;
+    loop {
+        let data = match rl.readline("[obsidian]~>") {
+            Ok(o) => o,
+            Err(e) => match e {
+                ReadlineError::Eof => break Err(anyhow!("Eof/ Ctrl+C")),
+                _ => break Err(anyhow!("{e}")),
+            },
+        };
+
+        let data = parse_input(data)?;
 
         match data.get_token(0)?.trim() {
             "add" => {
@@ -39,21 +51,20 @@ fn interface() -> anyhow::Result<()> {
                     .get_token(4)
                     .checker("master-key".to_string())?
                     .master_key_checker()
+                    .pe2()?
+                    .check_password_()
+                    .pe2();
+
+                let ac_password = data
+                    .get_token(5)
+                    .checker("action-password".to_string())?
+                    .check_password_()
                     .pe();
 
-                let add_password = data.get_token(5).checker("add-password".to_string()).pe();
-
-                let res = if fs::File::open(
-                    home_dirr()?
-                        .join("obsidian/obs_add_password.txt")
-                        .to_string_lossy()
-                        .to_string(),
-                )
-                .is_ok()
-                {
-                    add_pass_val(add_password?.trim()).pe()
+                let res = if ac_password.is_ok() {
+                    action_password(&ac_password?).pe()
                 } else {
-                    add_pass_maker(add_password?.trim()).pe()
+                    return Err(anyhow!("missing action-password"));
                 };
 
                 if res.is_ok() {
@@ -86,8 +97,21 @@ fn interface() -> anyhow::Result<()> {
                     .master_key_checker()
                     .pe();
 
-                if let (Ok(o), Ok(p)) = (url_app, master_key) {
-                    get(o, p, None).pe()?
+                let action_pass = data
+                    .get_token(3)
+                    .checker("action-password".to_string())
+                    .pe();
+
+                let res = if action_pass.is_ok() {
+                    action_password(&action_pass?).pe()
+                } else {
+                    return Err(anyhow!("missing action-password"));
+                };
+
+                if res.is_ok() {
+                    if let (Ok(o), Ok(p)) = (url_app, master_key) {
+                        get(o, p, None).pe()?
+                    }
                 }
             }
 
@@ -116,6 +140,41 @@ fn interface() -> anyhow::Result<()> {
                             "master-key".bright_yellow().bold()
                         );
                     }
+                    "--remove" => {
+                        println!(
+                            ">>{}: [{}] [{}] [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "remove".bright_yellow().bold(),
+                            "url/app".bright_yellow().bold(),
+                            "action-password".bright_yellow().bold()
+                        );
+                    }
+                    "--list" => {
+                        println!(
+                            ">>{}: [{}] [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "list".bright_yellow().bold(),
+                            "action-password".bright_yellow().bold()
+                        );
+                    }
+                    "--clear" => {
+                        println!(
+                            ">>{}: [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "clear".bright_yellow().bold(),
+                        );
+                    }
+                    "--exit" => {
+                        println!(
+                            ">>{}: [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "exit".bright_yellow().bold(),
+                        );
+                    }
                     _ => {
                         continue;
                     }
@@ -123,13 +182,38 @@ fn interface() -> anyhow::Result<()> {
                 continue;
             }
             "list" => {
-                list(None).pe()?;
+                let ac_pass = data
+                    .get_token(1)
+                    .checker("action-password".to_string())
+                    .pe();
+
+                let res = if ac_pass.is_ok() {
+                    action_password(&ac_pass?).pe()
+                } else {
+                    return Err(anyhow!("missing action-password"));
+                };
+
+                if res.is_ok() {
+                    list(None).pe()?;
+                }
             }
             "remove" => {
                 let url_app = data.get_token(1).checker("url/app".to_string()).pe();
+                let ac_password = data
+                    .get_token(2)
+                    .checker("action_password".to_string())
+                    .pe();
 
-                if let Ok(o) = url_app {
-                    remove(&o, None)?;
+                let res = if ac_password.is_ok() {
+                    action_password(&ac_password?).pe()
+                } else {
+                    return Err(anyhow!("missing action-password"));
+                };
+
+                if res.is_ok() {
+                    if let Ok(o) = url_app {
+                        remove(&o, None)?;
+                    }
                 }
             }
             "external" => match data.get_token(1)?.trim() {
@@ -141,38 +225,33 @@ fn interface() -> anyhow::Result<()> {
                         .get_token(5)
                         .checker("master-key".to_string())?
                         .master_key_checker()
+                        .pe2()?
+                        .check_password_()
+                        .pe2();
+
+                    let ac_password = data
+                        .get_token(6)
+                        .checker("add-password".to_string())?
+                        .check_password_()
                         .pe();
 
-                    let add_password = data.get_token(6).checker("add-password".to_string()).pe();
                     let external_file = data
                         .get_token(7)
                         .checker("external file/path/name".to_string())
                         .pe();
 
-                    let res = if fs::File::open(
-                        home_dirr()?
-                            .join("obsidian/obs_add_password.txt")
-                            .to_string_lossy()
-                            .to_string(),
-                    )
-                    .is_ok()
-                    {
-                        add_pass_val(add_password?.trim()).pe()
+                    let res = if ac_password.is_ok() {
+                        action_password(&ac_password?).pe()
                     } else {
-                        add_pass_maker(add_password?.trim()).pe()
+                        return Err(anyhow!("missing action-password"));
                     };
 
                     if res.is_ok() {
                         if let (Ok(us), Ok(p), Ok(u), Ok(m), Ok(ef)) =
                             (username, password, url_app, master_key, external_file)
                         {
-                            if fs::File::open(
-                                home_dirr()?
-                                    .join(&ef)
-                                    .to_string_lossy()
-                                    .to_string(),
-                            )
-                            .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
+                            if fs::File::open(home_dirr()?.join(&ef).to_string_lossy().to_string())
+                                .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
                             {
                                 _pre_()?;
                                 pre_add(us, u, p, m, Some(&ef)).pe()?;
@@ -195,42 +274,134 @@ fn interface() -> anyhow::Result<()> {
                         .master_key_checker()
                         .pe();
 
-                    let ef = data
+                    let ac_password = data
                         .get_token(4)
+                        .checker("action-password".to_string())
+                        .pe();
+
+                    let ef = data
+                        .get_token(5)
                         .checker("external file/path/name".to_string())
                         .pe();
 
-                    if let (Ok(o), Ok(p), Ok(ef)) = (url_app, master_key, ef) {
-                        get(o, p, Some(&ef)).pe()?
+                    let res = if ac_password.is_ok() {
+                        action_password(&ac_password?).pe()
+                    } else {
+                        return Err(anyhow!("missing action-password"));
+                    };
+
+                    if res.is_ok() {
+                        if let (Ok(o), Ok(p), Ok(ef)) = (url_app, master_key, ef) {
+                            get(o, p, Some(&ef)).pe()?
+                        }
                     }
                 }
                 "list" => {
-                    let ef = data
+                    let ac_pass = data
                         .get_token(2)
-                        .checker("external file/path/name".to_string())
+                        .checker("action-password".to_string())
                         .pe();
 
-                    if let Ok(o) = ef {
-                        list(Some(&o)).pe()?;
-                    }
-                }
-                "remove" => {
-                    let url_app = data.get_token(2).checker("url/app".to_string()).pe();
                     let ef = data
                         .get_token(3)
                         .checker("external file/path/name".to_string())
                         .pe();
 
-                    if let (Ok(o), Ok(ef)) = (url_app, ef) {
-                        remove(&o, Some(&ef))?;
+                    let res = if ac_pass.is_ok() {
+                        action_password(&ac_pass?).pe()
+                    } else {
+                        return Err(anyhow!("missing action-password"));
+                    };
+
+                    if res.is_ok() {
+                        if let Ok(o) = ef {
+                            list(Some(&o)).pe()?;
+                        }
                     }
                 }
+                "remove" => {
+                    let url_app = data.get_token(2).checker("url/app".to_string()).pe();
+                    let ac_pass = data
+                        .get_token(3)
+                        .checker("action-password".to_string())
+                        .pe();
+
+                    let ef = data
+                        .get_token(3)
+                        .checker("external file/path/name".to_string())
+                        .pe();
+
+                    let res = if ac_pass.is_ok() {
+                        action_password(&ac_pass?).pe()
+                    } else {
+                        return Err(anyhow!("missing action-password"));
+                    };
+
+                    if res.is_ok() {
+                        if let (Ok(o), Ok(ef)) = (url_app, ef) {
+                            remove(&o, Some(&ef))?;
+                        }
+                    }
+                }
+                "help" => match data.get_token(2)?.trim() {
+                    "--add" => {
+                        println!(
+                            ">>{}: [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "external".bright_yellow().bold(),
+                            "add".bright_yellow().bold(),
+                            "username/email".bright_yellow().bold(),
+                            "passwored".bright_yellow().bold(),
+                            "url/app".bright_yellow().bold(),
+                            "master-key".bright_yellow().bold(),
+                            "add-password".bright_yellow().bold(),
+                            "path/name".bright_yellow().bold(),
+                        );
+                    }
+                    "--get" => {
+                        println!(
+                            ">>{}: [{}] [{}] [{}] [{}] [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "external".bright_yellow().bold(),
+                            "get".bright_yellow().bold(),
+                            "url/app".bright_yellow().bold(),
+                            "master-key".bright_yellow().bold(),
+                            "path/name".bright_yellow().bold(),
+                        );
+                    }
+                    "--remove" => {
+                        println!(
+                            ">>{}: [{}] [{}] [{}] [{}] [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "external".bright_yellow().bold(),
+                            "remove".bright_yellow().bold(),
+                            "url/app".bright_yellow().bold(),
+                            "action-password".bright_yellow().bold(),
+                            "path/name".bright_yellow().bold(),
+                        );
+                    }
+                    "--list" => {
+                        println!(
+                            ">>{}: [{}] [{}] [{}] [{}] [{}]",
+                            "Usge".bright_green().bold(),
+                            "obsidan".bright_blue().bold(),
+                            "external".bright_yellow().bold(),
+                            "list".bright_yellow().bold(),
+                            "action-password".bright_yellow().bold(),
+                            "path/name".bright_yellow().bold()
+                        );
+                    }
+                    _ => continue,
+                },
                 _ => {
                     continue;
                 }
             },
             "exit" => {
-                std::process::exit(1);
+                std::process::exit(0);
             }
             "clear" => {
                 print!("\x1B[2J\x1B[1;1H");

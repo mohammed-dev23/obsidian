@@ -1,8 +1,11 @@
 pub mod safe {
+    use core::fmt;
+    use std::fs;
+
     use anyhow::anyhow;
     use colored::Colorize;
 
-    use crate::dec_enc::read_yaml;
+    use crate::dec_enc::{action_pass_maker, action_pass_val, home_dirr, read_yaml};
 
     pub trait Checkers {
         type Out;
@@ -24,6 +27,7 @@ pub mod safe {
 
     pub trait AnyHowErrHelper {
         fn pe(self) -> Self;
+        fn pe2(self) -> Self;
     }
 
     impl<T> Checkers for anyhow::Result<T> {
@@ -78,16 +82,126 @@ pub mod safe {
             }
             self
         }
+        fn pe2(self) -> Self {
+            if let Err(e) = &self {
+                println!(
+                    ">>{}: due to [{}]",
+                    "Error".bright_red(),
+                    e.to_string().bright_red().bold()
+                );
+            }
+            self
+        }
+    }
+
+    pub fn action_password(ac_pass: &str) -> anyhow::Result<()> {
+        let res = if fs::File::open(
+            home_dirr()?
+                .join("obsidian/obs_password.txt")
+                .to_string_lossy()
+                .to_string(),
+        )
+        .is_err()
+        {
+            action_pass_maker(ac_pass)
+        } else {
+            action_pass_val(ac_pass)
+        };
+
+        res
+    }
+
+    #[derive(PartialEq, Debug)]
+    pub enum PasswordCheckerT {
+        VeryWeek,
+        Week,
+        Fair,
+        Good,
+        Strong,
+    }
+
+    impl fmt::Display for PasswordCheckerT {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                PasswordCheckerT::VeryWeek => {
+                    write!(f, "the password is [{}]", "very week".bright_red().bold())
+                }
+                PasswordCheckerT::Week => {
+                    write!(f, "the password is [{}]", "week".bright_red().bold())
+                }
+                PasswordCheckerT::Fair => {
+                    write!(f, "the password is [{}]", "fair".bright_yellow().bold())
+                }
+                PasswordCheckerT::Good => {
+                    write!(f, "the password is [{}]", "good".bright_cyan().bold())
+                }
+                PasswordCheckerT::Strong => {
+                    write!(f, "the password is [{}]", "strong".bright_green().bold())
+                }
+            }
+        }
+    }
+
+    pub trait PasswordChecker {
+        type Out;
+
+        fn check_password_(&self) -> Self::Out;
+    }
+
+    impl PasswordChecker for String {
+        type Out = anyhow::Result<String>;
+
+        fn check_password_(&self) -> Self::Out {
+            let mut score = 0;
+
+            if self.len() >= 8 {
+                score += 1;
+            }
+            if self.len() >= 12 {
+                score += 1;
+            }
+            if self.len() >= 16 {
+                score += 1;
+            }
+            if self.len() >= 20 {
+                score += 1;
+            }
+
+            if self.chars().any(|s| s.is_lowercase()) {
+                score += 1;
+            }
+            if self.chars().any(|s| s.is_uppercase()) {
+                score += 1;
+            }
+            if self.chars().any(|s| s.is_numeric()) {
+                score += 1;
+            }
+            if self.chars().any(|s| s.is_alphanumeric()) {
+                score += 1;
+            }
+
+            let sc = match score {
+                0..=2 => PasswordCheckerT::VeryWeek,
+                3..=4 => PasswordCheckerT::Week,
+                5..=6 => PasswordCheckerT::Fair,
+                7..=8 => PasswordCheckerT::Good,
+                _ => PasswordCheckerT::Strong,
+            };
+
+            if sc == PasswordCheckerT::VeryWeek || sc == PasswordCheckerT::Week {
+                return Err(anyhow!("{}", sc));
+            }
+            println!(">>{}", sc);
+            return Ok(self.to_string());
+        }
     }
 }
 
 pub mod parser {
     use anyhow::{Ok, anyhow};
 
-    pub fn parse_input() -> anyhow::Result<Vec<String>> {
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        let data: Vec<String> = input.split_whitespace().map(|s| s.to_string()).collect();
+    pub fn parse_input(data: String) -> anyhow::Result<Vec<String>> {
+        let data: Vec<String> = data.split_whitespace().map(|s| s.to_string()).collect();
         return Ok(data);
     }
 
