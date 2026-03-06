@@ -43,21 +43,21 @@ pub fn _pre_() -> anyhow::Result<()> {
 }
 
 pub fn pre_add(
-    username_email: &String,
-    url_app: &String,
-    password: String,
-    master_key: String,
+    username_email: &str,
+    url_app: &str,
+    password: &str,
+    master_key: &str,
     ef: Option<&String>,
 ) -> anyhow::Result<()> {
-    let password = Zeroizing::new(password);
-    let master_key = Zeroizing::new(master_key);
+    let password = Zeroizing::new(password.to_string());
+    let master_key = Zeroizing::new(master_key.to_string());
 
-    let data = enc(&master_key, username_email, &password)?;
+    let data = enc(&master_key, &username_email.to_string(), &password)?;
 
     let data = BASE64_STANDARD.encode(data);
 
     let cont = Felids {
-        url_app: url_app.clone(),
+        url_app: url_app.to_string(),
         data: data,
     };
 
@@ -86,19 +86,19 @@ pub fn pre_add(
 }
 
 pub fn add(
-    username_email: &String,
-    url_app: &String,
-    password: String,
-    master_key: String,
+    username_email: &str,
+    url_app: &str,
+    password: &str,
+    master_key: &str,
     ef: Option<&String>,
 ) -> anyhow::Result<()> {
-    let password = Zeroizing::new(password);
-    let master_key = Zeroizing::new(master_key);
+    let password = Zeroizing::new(password.to_string());
+    let master_key = Zeroizing::new(master_key.to_string());
 
     let mut file = read_json(ef).pe()?;
-    let data = BASE64_STANDARD.encode(enc(&master_key, &username_email, &password)?);
+    let data = BASE64_STANDARD.encode(enc(&master_key, &username_email.to_string(), &password)?);
     let cont = Felids {
-        url_app: url_app.clone(),
+        url_app: url_app.to_string(),
         data: data,
     };
 

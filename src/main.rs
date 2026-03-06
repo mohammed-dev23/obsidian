@@ -156,10 +156,10 @@ fn interface() -> anyhow::Result<()> {
             "change" => {
                 helpers::helpers_fn::change_helper(None, 1, &data)?;
             }
-            "external" => match data.get_token(&1)?.trim() {
+            "external" => match data.get_token(&2)?.trim() {
                 "add" => {
                     let ef = data
-                        .get_token(&2)
+                        .get_token(&1)
                         .checker("external file/path".to_string())
                         .pe();
 
@@ -169,7 +169,7 @@ fn interface() -> anyhow::Result<()> {
                 }
                 "get" => {
                     let ef = data
-                        .get_token(&2)
+                        .get_token(&1)
                         .checker("external file/path".to_string())
                         .pe();
 
@@ -179,7 +179,7 @@ fn interface() -> anyhow::Result<()> {
                 }
                 "list" => {
                     let ef = data
-                        .get_token(&2)
+                        .get_token(&1)
                         .checker("external file/path".to_string())
                         .pe();
 
@@ -189,7 +189,7 @@ fn interface() -> anyhow::Result<()> {
                 }
                 "remove" => {
                     let ef = data
-                        .get_token(&2)
+                        .get_token(&1)
                         .checker("external file/path".to_string())
                         .pe();
 
@@ -199,7 +199,7 @@ fn interface() -> anyhow::Result<()> {
                 }
                 "search" => {
                     let ef = data
-                        .get_token(&2)
+                        .get_token(&1)
                         .checker("external file/path".to_string())
                         .pe();
 
@@ -209,7 +209,7 @@ fn interface() -> anyhow::Result<()> {
                 }
                 "change" => {
                     let ef = data
-                        .get_token(&2)
+                        .get_token(&1)
                         .checker("external file/path".to_string())
                         .pe();
 
@@ -217,7 +217,7 @@ fn interface() -> anyhow::Result<()> {
                         helpers::helpers_fn::change_helper(Some(&ef), 3, &data)?;
                     }
                 }
-                "help" => match data.get_token(&2)?.trim() {
+                "help" => match data.get_token(&3)?.trim() {
                     "--add" => {
                         println!(
                             ">>{}: [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}] [{}]",

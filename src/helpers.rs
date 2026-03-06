@@ -55,11 +55,19 @@ pub mod helpers_fn {
                 .is_err_and(|s| s.kind() == std::io::ErrorKind::NotFound)
                 {
                     _pre_()?;
-                    pre_add(&us.to_string(), u, p, m, ef).pe()?;
+                    pre_add(&us, &u, &p, &m, ef).pe()?;
+                }
+                if ef.is_some() {
+                    if let Some(ef) = ef {
+                        if fs::File::open(home_dirr()?.join(ef)).is_err() {
+                            _pre_()?;
+                            pre_add(&us.to_string(), &u, &p, &m, Some(ef)).pe()?;
+                        }
+                    }
                 } else {
-                    let u = u.clone().check_existing_url_apps(u, ef).pe();
+                    let u = &u.to_string().check_existing_url_apps(u, ef).pe();
                     if let Ok(u) = u {
-                        add(&us.to_string(), &u, p, m, ef).pe()?;
+                        add(&us.to_string(), &u, &p, &m, ef).pe()?;
                     }
                 }
             }
