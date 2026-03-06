@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use base64::prelude::*;
 use colored::Colorize;
+use rand::RngExt;
 use std::{
     env::home_dir,
     fs,
@@ -42,8 +43,8 @@ pub fn _pre_() -> anyhow::Result<()> {
 }
 
 pub fn pre_add(
-    username_email: String,
-    url_app: String,
+    username_email: &String,
+    url_app: &String,
     password: String,
     master_key: String,
     ef: Option<&String>,
@@ -51,7 +52,7 @@ pub fn pre_add(
     let password = Zeroizing::new(password);
     let master_key = Zeroizing::new(master_key);
 
-    let data = enc(&master_key, &username_email, &password)?;
+    let data = enc(&master_key, username_email, &password)?;
 
     let data = BASE64_STANDARD.encode(data);
 
@@ -62,17 +63,17 @@ pub fn pre_add(
 
     let vec = vec![cont];
 
-    let yaml = serde_yaml::to_string(&vec)?;
+    let json = serde_json::to_string(&vec)?;
 
     if let Some(o) = ef {
         fs::File::create(o)?;
-        fs::write(home_dirr()?.join(o), yaml)?;
+        fs::write(home_dirr()?.join(o), json)?;
         #[cfg(unix)]
         set_perm_over_file(&home_dirr()?.join(o))?;
     } else {
-        fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+        fs::write(home_dirr()?.join("obsidian/obs.json"), json)?;
         #[cfg(unix)]
-        set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
+        set_perm_over_file(&home_dirr()?.join("obsidian/obs.json"))?;
     }
 
     println!(
@@ -85,8 +86,8 @@ pub fn pre_add(
 }
 
 pub fn add(
-    username_email: String,
-    url_app: String,
+    username_email: &String,
+    url_app: &String,
     password: String,
     master_key: String,
     ef: Option<&String>,
@@ -94,7 +95,7 @@ pub fn add(
     let password = Zeroizing::new(password);
     let master_key = Zeroizing::new(master_key);
 
-    let mut file = read_yaml(ef).pe()?;
+    let mut file = read_json(ef).pe()?;
     let data = BASE64_STANDARD.encode(enc(&master_key, &username_email, &password)?);
     let cont = Felids {
         url_app: url_app.clone(),
@@ -103,17 +104,17 @@ pub fn add(
 
     file.push(cont);
 
-    let yaml = serde_yaml::to_string(&file)?;
+    let json = serde_json::to_string(&file)?;
 
     if let Some(o) = ef {
         fs::File::create(o)?;
-        fs::write(home_dirr()?.join(o), yaml)?;
+        fs::write(home_dirr()?.join(o), json)?;
         #[cfg(unix)]
         set_perm_over_file(&home_dirr()?.join(o))?;
     } else {
-        fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+        fs::write(home_dirr()?.join("obsidian/obs.json"), json)?;
         #[cfg(unix)]
-        set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
+        set_perm_over_file(&home_dirr()?.join("obsidian/obs.json"))?;
     }
 
     println!(
@@ -137,13 +138,14 @@ pub fn get(url_app: String, master_key: String, ef: Option<&String>) -> anyhow::
         ">>{}: got [{}] [{}] [{}]",
         "obsidian".bright_cyan().bold(),
         url_app.to_string().white().bold(),
-        decc[0].bright_white().bold(),
-        decc[1].bright_white().bold()
+        &decc[0].bright_white().bold(),
+        &decc[1].bright_white().bold()
     );
+
     Ok(())
 }
 
-pub fn read_yaml(ef: Option<&String>) -> anyhow::Result<Vec<Felids>> {
+pub fn read_json(ef: Option<&String>) -> anyhow::Result<Vec<Felids>> {
     let mut s = String::new();
 
     let mut o = if let Some(ef) = ef {
@@ -152,7 +154,7 @@ pub fn read_yaml(ef: Option<&String>) -> anyhow::Result<Vec<Felids>> {
     } else {
         let o = fs::File::open(
             home_dirr()?
-                .join("obsidian/obs.yaml")
+                .join("obsidian/obs.json")
                 .to_string_lossy()
                 .to_string(),
         )?;
@@ -161,10 +163,10 @@ pub fn read_yaml(ef: Option<&String>) -> anyhow::Result<Vec<Felids>> {
 
     o.read_to_string(&mut s)?;
 
-    if let Ok(vec) = serde_yaml::from_str::<Vec<Felids>>(&mut s) {
+    if let Ok(vec) = serde_json::from_str::<Vec<Felids>>(&mut s) {
         return Ok(vec);
     } else {
-        return Err(anyhow!("Couldn't read yaml file"));
+        return Err(anyhow!("Couldn't read json file"));
     }
 }
 
@@ -197,9 +199,9 @@ fn enc(master_key: &String, username_email: &String, password: &String) -> anyho
 }
 
 fn dec(master_key: &String, url_app: &String, ef: Option<&String>) -> anyhow::Result<Vec<u8>> {
-    let read_yaml = read_yaml(ef)?;
+    let read_json = read_json(ef)?;
 
-    let data = if let Some(s) = read_yaml.iter().find(|s| s.url_app == *url_app) {
+    let data = if let Some(s) = read_json.iter().find(|s| s.url_app == *url_app) {
         s.data.trim()
     } else {
         return Err(anyhow!("Couldn't get data"));
@@ -229,9 +231,9 @@ fn dec(master_key: &String, url_app: &String, ef: Option<&String>) -> anyhow::Re
 }
 
 pub fn list(ef: Option<&String>) -> anyhow::Result<()> {
-    let read_yaml = read_yaml(ef)?;
+    let read_json = read_json(ef)?;
 
-    for i in read_yaml {
+    for i in read_json {
         println!(
             ">>{} url/app <{}> | data : <{}>",
             "obsidian".bright_cyan().bold(),
@@ -252,7 +254,9 @@ pub fn action_pass_maker(action_pass: &str) -> anyhow::Result<()> {
             .to_string_lossy()
             .to_string(),
     )?;
-    set_perm_over_file_read_only(&home_dirr()?.join("obsidian/obs_password.txt"))?;
+
+    #[cfg(unix)]
+    set_perm_over_file(&home_dirr()?.join("obsidian/obs_password.txt"))?;
 
     let ac_pass = action_pass.trim();
 
@@ -314,13 +318,13 @@ pub fn action_pass_val(action_pass: &str) -> anyhow::Result<()> {
         return Ok(());
     } else {
         return Err(anyhow!(
-            "the add password didn't match try agian with diffrent one!"
+            "the action password didn't match try again with different one!"
         ));
     }
 }
 
 pub fn remove(url_app: &String, ef: Option<&String>) -> anyhow::Result<()> {
-    let mut read_yaml = read_yaml(ef)?;
+    let mut read_json = read_json(ef)?;
 
     println!(
         ">> are you sure you want to delete <{}>",
@@ -337,20 +341,20 @@ pub fn remove(url_app: &String, ef: Option<&String>) -> anyhow::Result<()> {
     stdin().read_line(&mut str)?;
 
     if str.trim() == "y" {
-        if let Some(o) = read_yaml.iter().position(|s| s.url_app == *url_app) {
-            read_yaml.remove(o);
+        if let Some(o) = read_json.iter().position(|s| s.url_app == *url_app) {
+            read_json.remove(o);
         }
 
-        let yaml = serde_yaml::to_string(&read_yaml)?;
+        let json = serde_json::to_string(&read_json)?;
 
         if let Some(ef) = ef {
-            fs::write(home_dirr()?.join(ef), yaml)?;
+            fs::write(home_dirr()?.join(ef), json)?;
             #[cfg(unix)]
             set_perm_over_file(&home_dirr()?.join(ef))?;
         } else {
-            fs::write(home_dirr()?.join("obsidian/obs.yaml"), yaml)?;
+            fs::write(home_dirr()?.join("obsidian/obs.json"), json)?;
             #[cfg(unix)]
-            set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
+            set_perm_over_file(&home_dirr()?.join("obsidian/obs.json"))?;
 
             println!(
                 ">>{} removed [{}]",
@@ -374,19 +378,10 @@ fn set_perm_over_file(path: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn set_perm_over_file_read_only(path: &PathBuf) -> anyhow::Result<()> {
-    let file = fs::File::open(path)?;
-    let mut perm = file.metadata()?.permissions();
-    perm.set_readonly(true);
-
-    fs::set_permissions(&path, perm)?;
-    Ok(())
-}
-
 pub fn search(url_app: &String, ef: Option<&String>) -> anyhow::Result<()> {
-    let read_yaml = read_yaml(ef)?;
+    let read_json = read_json(ef)?;
 
-    if let Some(ry) = read_yaml.iter().find(|u| u.url_app == *url_app) {
+    if let Some(ry) = read_json.iter().find(|u| u.url_app == *url_app) {
         println!(
             ">> {} [{}] [{}]",
             "found".bright_cyan().bold(),
@@ -407,31 +402,46 @@ pub fn change(
     let password = Zeroizing::new(password.to_string());
     let master_key = Zeroizing::new(master_key.to_string());
 
-    let mut read_yaml_i = read_yaml(ef)?;
+    let mut read_json_i = read_json(ef)?;
 
-    if let Some(o) = read_yaml_i
+    if let Some(o) = read_json_i
         .iter_mut()
         .find(|s| s.url_app == url_app.deref())
     {
         let enc = enc(&master_key, username_email, &password)?;
         let enc = BASE64_STANDARD.encode(enc);
         o.data = enc;
-        let yaml = serde_yaml::to_string(&read_yaml_i)?;
+        let json = serde_json::to_string(&read_json_i)?;
         if let Some(ef) = ef {
-            fs::write(home_dirr()?.join(ef), &yaml)?;
+            fs::write(home_dirr()?.join(ef), &json)?;
             #[cfg(unix)]
             set_perm_over_file(&home_dirr()?.join(ef))?;
         } else {
             fs::write(
                 home_dirr()?
-                    .join("obsidian/obs.yaml")
+                    .join("obsidian/obs.json")
                     .to_string_lossy()
                     .to_string(),
-                &yaml,
+                &json,
             )?;
             #[cfg(unix)]
-            set_perm_over_file(&home_dirr()?.join("obsidian/obs.yaml"))?;
+            set_perm_over_file(&home_dirr()?.join("obsidian/obs.json"))?;
         }
     }
     Ok(())
+}
+
+pub fn generate_password() -> anyhow::Result<String> {
+    use rand::distr::Alphanumeric;
+    let gen_pass: String = rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect();
+    println!(
+        ">> {} <{}>",
+        "generated password".bright_white().bold(),
+        gen_pass.bright_yellow().bold()
+    );
+    Ok(gen_pass)
 }

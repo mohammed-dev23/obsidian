@@ -4,10 +4,11 @@ pub mod safe {
 
     use anyhow::anyhow;
     use colored::Colorize;
+    use zxcvbn::Score;
 
     use crate::{
         backend::parser::Token,
-        dec_enc::{action_pass_maker, action_pass_val, home_dirr, read_yaml},
+        dec_enc::{action_pass_maker, action_pass_val, home_dirr, read_json},
     };
 
     pub trait Checkers {
@@ -30,7 +31,6 @@ pub mod safe {
 
     pub trait AnyHowErrHelper {
         fn pe(self) -> Self;
-        fn pe2(self) -> Self;
     }
 
     impl<T> Checkers for anyhow::Result<T> {
@@ -61,9 +61,9 @@ pub mod safe {
         type Out = anyhow::Result<String>;
 
         fn check_existing_url_apps(self, url_app: &str, ef: Option<&String>) -> Self::Out {
-            let read_yaml = read_yaml(ef)?;
+            let read_json = read_json(ef)?;
 
-            if let Some(o) = read_yaml.iter().find(|s| s.url_app == url_app) {
+            if let Some(o) = read_json.iter().find(|s| s.url_app == url_app) {
                 return Err(anyhow!(
                     "the url/app does already exist try another one or add special symbols beside it ! <{}>",
                     o.url_app.to_string().bright_yellow().bold()
@@ -78,16 +78,6 @@ pub mod safe {
         fn pe(self) -> Self {
             if let Err(e) = &self {
                 eprintln!(
-                    ">>{}: due to [{}]",
-                    "Error".bright_red(),
-                    e.to_string().bright_red().bold()
-                );
-            }
-            self
-        }
-        fn pe2(self) -> Self {
-            if let Err(e) = &self {
-                println!(
                     ">>{}: due to [{}]",
                     "Error".bright_red(),
                     e.to_string().bright_red().bold()
@@ -173,46 +163,35 @@ pub mod safe {
     pub trait PasswordChecker {
         type Out;
 
-        fn check_password_(&self, pwd: &String) -> Self::Out;
+        fn check_password_(
+            &self,
+            pwd: &String,
+            context: anyhow::Result<&String, &anyhow::Error>,
+        ) -> Self::Out;
     }
 
     impl PasswordChecker for String {
         type Out = anyhow::Result<String>;
 
-        fn check_password_(&self, pwd: &String) -> Self::Out {
-            let mut score = 0;
-
-            if self.len() >= 8 {
-                score += 1;
-            }
-            if self.len() >= 12 {
-                score += 1;
-            }
-            if self.len() >= 16 {
-                score += 1;
-            }
-            if self.len() >= 20 {
-                score += 1;
-            }
-
-            if self.chars().any(|s| s.is_lowercase()) {
-                score += 1;
-            }
-            if self.chars().any(|s| s.is_uppercase()) {
-                score += 1;
-            }
-            if self.chars().any(|s| s.is_numeric()) {
-                score += 1;
-            }
-            if self.chars().any(|s| s.is_alphanumeric()) {
-                score += 1;
-            }
+        fn check_password_(
+            &self,
+            pwd: &String,
+            context: anyhow::Result<&String, &anyhow::Error>,
+        ) -> Self::Out {
+            let score = zxcvbn::zxcvbn(
+                &self,
+                &[context
+                    .map_err(|_| anyhow!("missing username/email"))?
+                    .as_str()],
+            )
+            .score();
 
             let sc = match score {
-                0..=2 => PasswordCheckerT::VeryWeak(pwd),
-                3..=4 => PasswordCheckerT::Weak(pwd),
-                5..=6 => PasswordCheckerT::Fair(pwd),
-                7..=8 => PasswordCheckerT::Good(pwd),
+                Score::Zero => PasswordCheckerT::VeryWeak(pwd),
+                Score::One => PasswordCheckerT::Weak(pwd),
+                Score::Two => PasswordCheckerT::Fair(pwd),
+                Score::Three => PasswordCheckerT::Good(pwd),
+                Score::Four => PasswordCheckerT::Strong(pwd),
                 _ => PasswordCheckerT::Strong(pwd),
             };
 
@@ -228,12 +207,12 @@ pub mod safe {
         url_app: &String,
         token: usize,
         data: &Vec<String>,
-        ef: Option<String>,
+        ef: Option<&String>,
     ) -> anyhow::Result<()> {
         if url_app
             .deref()
             .to_string()
-            .check_existing_url_apps(&*data.get_token(token)?, ef.as_ref())
+            .check_existing_url_apps(&*data.get_token(&token)?, ef)
             .is_ok()
         {
             return Err(anyhow!("The url/app does not exist!"));
@@ -251,16 +230,16 @@ pub mod parser {
     }
 
     pub trait Token {
-        fn get_token(&self, index: usize) -> anyhow::Result<String>;
+        fn get_token(&self, index: &usize) -> anyhow::Result<String>;
     }
 
     impl Token for Vec<String> {
-        fn get_token(&self, index: usize) -> anyhow::Result<String> {
-            if self.is_empty() && index == 0 {
+        fn get_token(&self, index: &usize) -> anyhow::Result<String> {
+            if self.is_empty() && *index == 0 {
                 return Ok(String::new());
             }
 
-            if let Some(d) = self.get(index) {
+            if let Some(d) = self.get(*index) {
                 return Ok(d.to_string());
             } else {
                 return Err(anyhow!("Couldn't get data from the parser!"));
