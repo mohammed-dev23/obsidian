@@ -44,8 +44,7 @@ pub mod helpers_fn {
         };
 
         if res.is_ok() {
-            if let (Ok(us), Ok(p), Ok(u), Ok(m)) = (username_email, password, &id, master_key)
-            {
+            if let (Ok(us), Ok(p), Ok(u), Ok(m)) = (username_email, password, &id, master_key) {
                 if fs::File::open(
                     home_dirr()?
                         .join("obsidian/obs.json")
@@ -68,7 +67,7 @@ pub mod helpers_fn {
                 } else {
                     let u = &u.to_string().check_existing_ids(u, ef).pe();
                     if let Ok(u) = u {
-                        add(&us.to_string(), &u, &p, &m,ef).pe()?;
+                        add(&us.to_string(), &u, &p, &m, ef).pe()?;
                     }
                 }
             }
@@ -99,8 +98,7 @@ pub mod helpers_fn {
         };
 
         does_not_e(
-            &id
-                .as_ref()
+            &id.as_ref()
                 .map_err(|_| anyhow!("moving id error!"))?
                 .to_string(),
             index,
@@ -160,8 +158,7 @@ pub mod helpers_fn {
         };
 
         does_not_e(
-            &id
-                .as_ref()
+            &id.as_ref()
                 .map_err(|_| anyhow!("moving id error!"))?
                 .to_string(),
             index,
@@ -199,8 +196,7 @@ pub mod helpers_fn {
         };
 
         does_not_e(
-            &id
-                .as_ref()
+            &id.as_ref()
                 .map_err(|_| anyhow!("moving id error!"))?
                 .to_string(),
             index,
@@ -253,8 +249,7 @@ pub mod helpers_fn {
         };
 
         does_not_e(
-            &id
-                .as_ref()
+            &id.as_ref()
                 .map_err(|_| anyhow!("moving id error!"))?
                 .to_string(),
             index,

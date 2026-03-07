@@ -328,7 +328,9 @@ fn interface() -> anyhow::Result<()> {
                 }
                 #[cfg(windows)]
                 {
-                    std::process::Command::new("cmd").args(["/C" , "cls"]).status()?;
+                    std::process::Command::new("cmd")
+                        .args(["/C", "cls"])
+                        .status()?;
                 }
                 continue;
             }

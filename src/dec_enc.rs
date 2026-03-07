@@ -12,7 +12,8 @@ use std::{
 use zeroize::Zeroizing;
 
 use aes_gcm::{
-    AeadCore, Aes256Gcm, Key, KeyInit, Nonce, aead::{Aead, OsRng, rand_core::RngCore}
+    AeadCore, Aes256Gcm, Key, KeyInit, Nonce,
+    aead::{Aead, OsRng, rand_core::RngCore},
 };
 use argon2::Argon2;
 use serde::{Deserialize, Serialize};
@@ -70,7 +71,7 @@ pub fn pre_add(
         #[cfg(unix)]
         set_perm_over_file(&home_dirr()?.join(o))?;
     } else {
-        let json_enc = BASE64_STANDARD.encode(enc_all( json)?);
+        let json_enc = BASE64_STANDARD.encode(enc_all(json)?);
         fs::write(home_dirr()?.join("obsidian/obs.json"), json_enc)?;
         #[cfg(unix)]
         set_perm_over_file(&home_dirr()?.join("obsidian/obs.json"))?;
@@ -409,10 +410,7 @@ pub fn change(
 
     let mut read_json_i = read_json(ef)?;
 
-    if let Some(o) = read_json_i
-        .iter_mut()
-        .find(|s| s.id == id.deref())
-    {
+    if let Some(o) = read_json_i.iter_mut().find(|s| s.id == id.deref()) {
         let enc = enc(&master_key, username_email, &password)?;
         let enc = BASE64_STANDARD.encode(enc);
         o.data = enc;
@@ -453,19 +451,21 @@ pub fn generate_password() -> anyhow::Result<String> {
     Ok(gen_pass)
 }
 
-fn enc_all (data:String) -> anyhow::Result<Vec<u8>> { 
+fn enc_all(data: String) -> anyhow::Result<Vec<u8>> {
     let mut get_ac = fs::File::open(home_dirr()?.join("obsidian/obs_password.txt"))?;
     let mut storeit = String::new();
     get_ac.read_to_string(&mut storeit)?;
 
     let dec = BASE64_STANDARD.decode(&storeit.trim())?;
-    let (_ , decc) = dec.split_at(16);
+    let (_, decc) = dec.split_at(16);
 
     let key = Key::<Aes256Gcm>::from_slice(&decc);
     let cip = Aes256Gcm::new(&key);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
-    let data = cip.encrypt(&nonce, data.as_bytes()).map_err(|_| anyhow!("Couldn't enc vault"))?;
+    let data = cip
+        .encrypt(&nonce, data.as_bytes())
+        .map_err(|_| anyhow!("Couldn't enc vault"))?;
 
     let mut vec = Vec::new();
     vec.extend_from_slice(&nonce);
@@ -474,20 +474,22 @@ fn enc_all (data:String) -> anyhow::Result<Vec<u8>> {
     return Ok(vec);
 }
 
-fn dec_all (data:Vec<u8>) -> anyhow::Result<Vec<u8>> {
+fn dec_all(data: Vec<u8>) -> anyhow::Result<Vec<u8>> {
     let mut get_ac = fs::File::open(home_dirr()?.join("obsidian/obs_password.txt"))?;
     let mut store_it = String::new();
     get_ac.read_to_string(&mut store_it)?;
 
     let dec = BASE64_STANDARD.decode(store_it)?;
-    let (_ , decc) = dec.split_at(16);
-    let (nonce , data) = data.split_at(12);
+    let (_, decc) = dec.split_at(16);
+    let (nonce, data) = data.split_at(12);
 
     let key = Key::<Aes256Gcm>::from_slice(&decc);
     let cip = Aes256Gcm::new(&key);
     let nonce = Nonce::from_slice(nonce);
 
-    let data = cip.decrypt(&nonce, data).map_err(|_| anyhow!("Couldn't dec vault"))?;
+    let data = cip
+        .decrypt(&nonce, data)
+        .map_err(|_| anyhow!("Couldn't dec vault"))?;
 
     return Ok(data);
 }
