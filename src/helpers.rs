@@ -79,7 +79,7 @@ pub mod helpers_fn {
     pub fn get_helper(ef: Option<&String>, index: usize, data: &Vec<String>) -> anyhow::Result<()> {
         let mut indexx = index;
 
-        let id = data.get_token(&indexx).checker("app/url".to_string()).pe();
+        let id = data.get_token(&indexx).checker("id".to_string()).pe();
         indexx += 1;
         let master_key = data
             .get_token(&indexx)

@@ -137,7 +137,7 @@ Default location: `~/obsidian/`
 External vaults are stored at the specified path relative to `~`.
 
 Each entry stores:
-- `id`: URL/app identifier
+- `id`: id identifier
 - `data`: Base64-encoded encrypted blob containing username/email and password
 
 ## Building from Source
